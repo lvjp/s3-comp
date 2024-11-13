@@ -3,5 +3,17 @@
   "extends": ["config:best-practices", ":disableRateLimiting"],
   "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
   "dependencyDashboard": false,
-  "timezone": "Europe/Paris"
+  "timezone": "Europe/Paris",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update dockerfile sections in linters descriptors",
+      "fileMatch": [
+        "^\\.github/workflows/linting\\.yml$"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>.+) depName=(?<depName>.+)\\s+\\w+: \\s?(?<currentValue>.+)"
+      ]
+    }
+  ]
 }
