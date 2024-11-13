@@ -1,0 +1,55 @@
+---
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - dupl
+        - gosec
+        - goconst
+linters:
+  enable:
+    - bodyclose
+    - errcheck
+    - errname
+    - gci
+    - gocritic
+    - gocyclo
+    - gofmt
+    - gosec
+    - gosimple
+    - govet
+    - importas
+    - ineffassign
+    - nilerr
+    - nilnil
+    - revive
+    - staticcheck
+    - testifylint
+    - unconvert
+    - unused
+    - whitespace
+    - zerologlint
+
+linters-settings:
+  errcheck:
+    # Report about not checking of errors in type assertions: `a := b.(MyStruct)`.
+    check-type-assertions: true
+    # report about assignment of errors to blank identifier: `num, _ := strconv.Atoi(numStr)`;
+    check-blank: true
+  gci:
+    sections:
+      - standard
+      - localmodule
+      - default
+    custom-order: true
+  gocyclo:
+    # minimal code complexity to report, 30 by default
+    min-complexity: 15
+  govet:
+    enable:
+      # report about shadowed variables
+      - shadow
+  revive:
+    rules:
+      - name: package-comments
+        disabled: true
