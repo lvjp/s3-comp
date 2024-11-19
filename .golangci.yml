@@ -47,7 +47,9 @@ linters-settings:
     min-complexity: 15
   govet:
     enable:
-      # report about shadowed variables
+      # Check for redundant or impossible nil comparisons.
+      - nilness
+      # Check for possible unintended shadowing of variables.
       - shadow
   revive:
     rules:
