@@ -70,7 +70,7 @@ func (c *Client) CreateBucket(ctx context.Context, input *CreateBucketInput) (*C
 
 	resp, err := c.config.HTTPClient.Do(req)
 	if err != nil {
-		return nil, NewAPITransportError(ctx, err.Error())
+		return nil, NewAPITransportError(ctx, err)
 	}
 
 	defer resp.Body.Close()

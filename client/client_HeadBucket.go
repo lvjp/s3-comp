@@ -39,7 +39,7 @@ func (c *Client) HeadBucket(ctx context.Context, input *HeadBucketInput) (*HeadB
 
 	resp, err := c.config.HTTPClient.Do(req)
 	if err != nil {
-		return nil, NewAPITransportError(ctx, err.Error())
+		return nil, NewAPITransportError(ctx, err)
 	}
 
 	defer resp.Body.Close()

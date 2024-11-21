@@ -33,28 +33,23 @@ func NewSDKErrorBucketIsMandatory(ctx context.Context) *SDKError {
 // error response.
 type ServerError struct {
 	OperationName string
-	message       *string
-	response      *http.Response
+	Message       string
 }
 
 func (err *ServerError) Error() string {
-	if err.message != nil {
-		return err.OperationName + ": " + *err.message
-	}
-
-	return err.OperationName + ": unexpected http line " + strconv.Quote(err.response.Status)
+	return err.OperationName + ": " + err.Message
 }
 
-func NewAPITransportError(ctx context.Context, message string) *ServerError {
+func NewAPITransportError(ctx context.Context, err error) *ServerError {
 	return &ServerError{
 		OperationName: getOperationName(ctx),
-		message:       &message,
+		Message:       err.Error(),
 	}
 }
 
 func NewAPIResponseError(ctx context.Context, resp *http.Response) *ServerError {
 	return &ServerError{
 		OperationName: getOperationName(ctx),
-		response:      resp,
+		Message:       "unexpected http line " + strconv.Quote(resp.Status),
 	}
 }
