@@ -75,33 +75,28 @@ func (output *CreateBucketOutput) UnmarshalHTTP(ctx context.Context, resp *http.
 	return nil
 }
 
-const operationCreateBucket = "CreateBucket"
-
 func (c *Client) CreateBucket(ctx context.Context, input *CreateBucketInput) (*CreateBucketOutput, error) {
-	ctx = withOperationName(ctx, operationCreateBucket)
-
-	if input.Bucket == "" {
-		return nil, NewSDKErrorBucketIsMandatory(ctx)
-	}
-
-	req := newRequest()
-
-	if err := input.MarshalHTTP(ctx, req); err != nil {
-		return nil, NewSDKError(ctx, err.Error())
-	}
-
-	if err := c.resolve(ctx, req, input); err != nil {
-		return nil, NewSDKError(ctx, err.Error())
-	}
-
-	resp, err := c.config.HTTPClient.Do(req)
-	if err != nil {
-		return nil, NewAPITransportError(ctx, err)
-	}
-	defer resp.Body.Close()
+	const operationCreateBucket = "CreateBucket"
 
 	output := new(CreateBucketOutput)
-	if err := output.UnmarshalHTTP(ctx, resp); err != nil {
+
+	handler := DecorateHandler(
+		HandlerFunc(c.doRequest),
+		mandatoryBucketMiddleware,
+		initHTTPRequestMiddleware,
+		httpMarshalerMiddleware,
+		c.resolveMiddleware,
+		httpUnmarshalerMiddleware,
+	)
+
+	mwCtx := &MiddlewareContext{
+		Context:  withOperationName(ctx, operationCreateBucket),
+		Bucket:   &input.Bucket,
+		S3Input:  input,
+		S3Output: output,
+	}
+
+	if err := handler.Handle(mwCtx); err != nil {
 		return nil, err
 	}
 
