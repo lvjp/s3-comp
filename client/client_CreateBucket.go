@@ -23,24 +23,11 @@ type CreateBucketInput struct {
 	CreateBucketConfiguration *CreateBucketConfiguration
 }
 
-type CreateBucketOutput struct {
-	Location *string
+func (input *CreateBucketInput) GetBucket() string {
+	return input.Bucket
 }
 
-const operationCreateBucket = "CreateBucket"
-
-func (c *Client) CreateBucket(ctx context.Context, input *CreateBucketInput) (*CreateBucketOutput, error) {
-	ctx = withOperationName(ctx, operationCreateBucket)
-
-	if input.Bucket == "" {
-		return nil, NewSDKErrorBucketIsMandatory(ctx)
-	}
-
-	req, err := c.newRequest(ctx, &input.Bucket)
-	if err != nil {
-		return nil, err
-	}
-
+func (input *CreateBucketInput) MarshalHTTP(ctx context.Context, req *http.Request) error {
 	req.Method = http.MethodPut
 
 	for key, val := range map[string]*string{
@@ -59,37 +46,63 @@ func (c *Client) CreateBucket(ctx context.Context, input *CreateBucketInput) (*C
 	}
 
 	if input.CreateBucketConfiguration != nil {
-		inputBody, marshalErr := xml.Marshal(input.CreateBucketConfiguration)
-		if marshalErr != nil {
-			return nil, NewSDKError(ctx, marshalErr.Error())
+		inputBody, err := xml.Marshal(input.CreateBucketConfiguration)
+		if err != nil {
+			return err
 		}
 
 		req.ContentLength = int64(len(inputBody))
 		req.Body = io.NopCloser(bytes.NewReader(inputBody))
 	}
 
+	return nil
+}
+
+type CreateBucketOutput struct {
+	Location *string
+}
+
+func (output *CreateBucketOutput) UnmarshalHTTP(ctx context.Context, resp *http.Response) error {
+	if resp.StatusCode != http.StatusOK {
+		return NewAPIResponseError(ctx, resp)
+	}
+
+	location := resp.Header.Values("Location")
+	if location != nil {
+		output.Location = &location[0]
+	}
+
+	return nil
+}
+
+const operationCreateBucket = "CreateBucket"
+
+func (c *Client) CreateBucket(ctx context.Context, input *CreateBucketInput) (*CreateBucketOutput, error) {
+	ctx = withOperationName(ctx, operationCreateBucket)
+
+	if input.Bucket == "" {
+		return nil, NewSDKErrorBucketIsMandatory(ctx)
+	}
+
+	req := newRequest()
+
+	if err := input.MarshalHTTP(ctx, req); err != nil {
+		return nil, NewSDKError(ctx, err.Error())
+	}
+
+	if err := c.resolve(ctx, req, input); err != nil {
+		return nil, NewSDKError(ctx, err.Error())
+	}
+
 	resp, err := c.config.HTTPClient.Do(req)
 	if err != nil {
 		return nil, NewAPITransportError(ctx, err)
 	}
-
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, NewAPIResponseError(ctx, resp)
-	}
-
-	extract := func(key string) *string {
-		values := resp.Header.Values(key)
-		if values == nil {
-			return nil
-		}
-
-		return &values[0]
-	}
-
-	output := &CreateBucketOutput{
-		Location: extract("Location"),
+	output := new(CreateBucketOutput)
+	if err := output.UnmarshalHTTP(ctx, resp); err != nil {
+		return nil, err
 	}
 
 	return output, nil

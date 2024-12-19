@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 )
 
 const defaultRegion = "eu-west-1"
@@ -72,17 +71,13 @@ func (der *DefaultEndpointResolver) ResolveEndpoint(_ context.Context, params En
 		return nil, err
 	}
 
-	if params.Bucket == nil {
-		return &Endpoint{URI: *base}, nil
-	}
-
-	if params.UsePathStyle {
-		if !strings.HasSuffix(base.Path, "/") {
-			base.Path += "/"
+	if params.Bucket != nil {
+		if params.UsePathStyle {
+			base.Path = joinURIPath(base.Path, *params.Bucket)
+			base.RawPath = joinURIPath(base.RawPath, *params.Bucket)
+		} else {
+			base.Host = *params.Bucket + "." + base.Host
 		}
-		base.Path += *params.Bucket
-	} else {
-		base.Host = *params.Bucket + "." + base.Host
 	}
 
 	return &Endpoint{
