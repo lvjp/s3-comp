@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"net/http"
+	"net/url"
 )
 
 type Client struct {
@@ -21,32 +22,68 @@ func New(cfg Config) (*Client, error) {
 	return c, nil
 }
 
-func (c *Client) newRequest(ctx context.Context, bucket *string) (*http.Request, error) {
-	endpoint, err := c.config.EndpointResolver.ResolveEndpoint(
-		ctx,
-		EndpointParameters{
-			Bucket:       bucket,
-			Region:       &c.config.Region,
-			Endpoint:     &c.config.Endpoint,
-			UsePathStyle: c.config.UsePathStyle,
-		},
-	)
+func newRequest() *http.Request {
+	return &http.Request{
+		URL:    new(url.URL),
+		Header: http.Header{},
+
+		// The value -1 indicates that the length is unknown.
+		ContentLength: -1,
+		Body:          http.NoBody,
+	}
+}
+
+func (c *Client) resolve(ctx context.Context, req *http.Request, input any) error {
+	params := EndpointParameters{
+		Region:       &c.config.Region,
+		Endpoint:     &c.config.Endpoint,
+		UsePathStyle: c.config.UsePathStyle,
+	}
+
+	if bucketGetter, ok := input.(BucketGetter); ok {
+		bucket := bucketGetter.GetBucket()
+		params.Bucket = &bucket
+	}
+
+	endpoint, err := c.config.EndpointResolver.ResolveEndpoint(ctx, params)
 	if err != nil {
 		if _, ok := c.config.EndpointResolver.(*DefaultEndpointResolver); ok {
-			return nil, err
+			return err
 		}
 
-		return nil, NewSDKError(ctx, "cannot resolve endpoint: "+err.Error())
+		return NewSDKError(ctx, "cannot resolve endpoint: "+err.Error())
 	}
 
-	req := &http.Request{
-		URL:    &endpoint.URI,
-		Header: endpoint.Headers,
+	req.URL.Scheme = endpoint.URI.Scheme
+	req.URL.Host = endpoint.URI.Host
+	req.URL.Path = joinURIPath(endpoint.URI.Path, req.URL.Path)
+	req.URL.RawPath = joinURIPath(endpoint.URI.RawPath, req.URL.RawPath)
+
+	for key := range endpoint.Headers {
+		req.Header.Set(key, endpoint.Headers.Get(key))
 	}
 
-	if c.config.UserAgent != nil {
-		req.Header.Set("User-Agent", *c.config.UserAgent)
+	return nil
+}
+
+type BucketGetter interface {
+	GetBucket() string
+}
+
+func joinURIPath(a, b string) string {
+	if len(a) == 0 {
+		a = "/"
+	} else if a[0] != '/' {
+		a = "/" + a
 	}
 
-	return req, nil
+	if len(b) != 0 && b[0] == '/' {
+		b = b[1:]
+	}
+
+	if len(b) != 0 && a[len(a)-1] != '/' {
+		a += "/"
+	}
+
+	return a + b
 }

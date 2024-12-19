@@ -12,40 +12,28 @@ type HeadBucketInput struct {
 	ExpectedBucketOwner *string
 }
 
-type HeadBucketOutput struct {
-	BucketRegion     *string
-	AccessPointAlias *string
+func (input *HeadBucketInput) GetBucket() string {
+	return input.Bucket
 }
 
-const operationHeadBucket = "HeadBucket"
-
-func (c *Client) HeadBucket(ctx context.Context, input *HeadBucketInput) (*HeadBucketOutput, error) {
-	ctx = withOperationName(ctx, operationHeadBucket)
-
-	if input.Bucket == "" {
-		return nil, NewSDKErrorBucketIsMandatory(ctx)
-	}
-
-	req, err := c.newRequest(ctx, &input.Bucket)
-	if err != nil {
-		return nil, err
-	}
-
+func (input *HeadBucketInput) MarshalHTTP(ctx context.Context, req *http.Request) error {
 	req.Method = http.MethodHead
 
 	if input.ExpectedBucketOwner != nil {
 		req.Header.Set("X-Amz-Expected-Bucket-Owner", *input.ExpectedBucketOwner)
 	}
 
-	resp, err := c.config.HTTPClient.Do(req)
-	if err != nil {
-		return nil, NewAPITransportError(ctx, err)
-	}
+	return nil
+}
 
-	defer resp.Body.Close()
+type HeadBucketOutput struct {
+	BucketRegion     *string
+	AccessPointAlias *string
+}
 
+func (output *HeadBucketOutput) UnmarshalHTTP(ctx context.Context, resp *http.Response) error {
 	if resp.StatusCode != http.StatusOK {
-		return nil, NewAPIResponseError(ctx, resp)
+		return NewAPIResponseError(ctx, resp)
 	}
 
 	extract := func(key string) *string {
@@ -57,9 +45,40 @@ func (c *Client) HeadBucket(ctx context.Context, input *HeadBucketInput) (*HeadB
 		return &values[0]
 	}
 
-	output := &HeadBucketOutput{
-		BucketRegion:     extract("X-Amz-Bucket-Region"),
-		AccessPointAlias: extract("X-Amz-Access-Point-Alias"),
+	output.BucketRegion = extract("X-Amz-Bucket-Region")
+	output.AccessPointAlias = extract("X-Amz-Access-Point-Alias")
+
+	return nil
+}
+
+const operationHeadBucket = "HeadBucket"
+
+func (c *Client) HeadBucket(ctx context.Context, input *HeadBucketInput) (*HeadBucketOutput, error) {
+	ctx = withOperationName(ctx, operationHeadBucket)
+
+	if input.Bucket == "" {
+		return nil, NewSDKErrorBucketIsMandatory(ctx)
+	}
+
+	req := newRequest()
+
+	if err := input.MarshalHTTP(ctx, req); err != nil {
+		return nil, NewSDKError(ctx, err.Error())
+	}
+
+	if err := c.resolve(ctx, req, input); err != nil {
+		return nil, NewSDKError(ctx, err.Error())
+	}
+
+	resp, err := c.config.HTTPClient.Do(req)
+	if err != nil {
+		return nil, NewAPITransportError(ctx, err)
+	}
+	defer resp.Body.Close()
+
+	output := new(HeadBucketOutput)
+	if err := output.UnmarshalHTTP(ctx, resp); err != nil {
+		return nil, err
 	}
 
 	return output, nil
