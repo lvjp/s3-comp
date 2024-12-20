@@ -13,16 +13,18 @@ func TestClient_HeadBucket(t *testing.T) {
 			return &HeadBucketInput{}
 		},
 		Normal: func() (*HeadBucketInput, *HeadBucketOutput, http.HandlerFunc) {
+			bucketRegion := "BucketRegion"
+			accessPointAlias := "AccessPointAlias"
 			return &HeadBucketInput{
 					Bucket: "TheBucket",
 				},
 				&HeadBucketOutput{
-					BucketRegion:     ToPointer("BucketRegion"),
-					AccessPointAlias: ToPointer("AccessPointAlias"),
+					BucketRegion:     &bucketRegion,
+					AccessPointAlias: &accessPointAlias,
 				},
 				func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("X-Amz-Bucket-Region", "BucketRegion")
-					w.Header().Set("X-Amz-Access-Point-Alias", "AccessPointAlias")
+					w.Header().Set("X-Amz-Bucket-Region", bucketRegion)
+					w.Header().Set("X-Amz-Access-Point-Alias", accessPointAlias)
 				}
 		},
 		Executor: func(c *Client) func(context.Context, *HeadBucketInput) (*HeadBucketOutput, error) {

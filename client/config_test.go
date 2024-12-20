@@ -9,26 +9,31 @@ import (
 )
 
 func TestDefaultEndpointResolver_ResolveEndpoint(t *testing.T) {
+	region := "fr-me"
+	bucket := "my-bucket"
+	awsEndpoint := "https://s3.amazonaws.com"
+	myEndpoint := "http://my-endpoint.com"
+
 	testCases := []struct {
 		Args     EndpointParameters
 		Expected string
 	}{
-		{EndpointParameters{Bucket: nil, Region: nil, Endpoint: nil, UsePathStyle: false}, "https://s3.amazonaws.com"},
-		{EndpointParameters{Bucket: nil, Region: nil, Endpoint: nil, UsePathStyle: true}, "https://s3.amazonaws.com"},
-		{EndpointParameters{Bucket: nil, Region: nil, Endpoint: ToPointer("http://my-endpoint.com"), UsePathStyle: false}, "http://my-endpoint.com"},
-		{EndpointParameters{Bucket: nil, Region: nil, Endpoint: ToPointer("http://my-endpoint.com"), UsePathStyle: true}, "http://my-endpoint.com"},
-		{EndpointParameters{Bucket: nil, Region: ToPointer("fr-me"), Endpoint: nil, UsePathStyle: false}, "https://s3.fr-me.amazonaws.com"},
-		{EndpointParameters{Bucket: nil, Region: ToPointer("fr-me"), Endpoint: nil, UsePathStyle: true}, "https://s3.fr-me.amazonaws.com"},
-		{EndpointParameters{Bucket: nil, Region: ToPointer("fr-me"), Endpoint: ToPointer("http://my-endpoint.com"), UsePathStyle: false}, "http://my-endpoint.com"},
-		{EndpointParameters{Bucket: nil, Region: ToPointer("fr-me"), Endpoint: ToPointer("http://my-endpoint.com"), UsePathStyle: true}, "http://my-endpoint.com"},
-		{EndpointParameters{Bucket: ToPointer("my-bucket"), Region: nil, Endpoint: nil, UsePathStyle: false}, "https://my-bucket.s3.amazonaws.com"},
-		{EndpointParameters{Bucket: ToPointer("my-bucket"), Region: nil, Endpoint: nil, UsePathStyle: true}, "https://s3.amazonaws.com/my-bucket"},
-		{EndpointParameters{Bucket: ToPointer("my-bucket"), Region: nil, Endpoint: ToPointer("http://my-endpoint.com"), UsePathStyle: false}, "http://my-bucket.my-endpoint.com"},
-		{EndpointParameters{Bucket: ToPointer("my-bucket"), Region: nil, Endpoint: ToPointer("http://my-endpoint.com"), UsePathStyle: true}, "http://my-endpoint.com/my-bucket"},
-		{EndpointParameters{Bucket: ToPointer("my-bucket"), Region: ToPointer("fr-me"), Endpoint: nil, UsePathStyle: false}, "https://my-bucket.s3.fr-me.amazonaws.com"},
-		{EndpointParameters{Bucket: ToPointer("my-bucket"), Region: ToPointer("fr-me"), Endpoint: nil, UsePathStyle: true}, "https://s3.fr-me.amazonaws.com/my-bucket"},
-		{EndpointParameters{Bucket: ToPointer("my-bucket"), Region: ToPointer("fr-me"), Endpoint: ToPointer("http://my-endpoint.com"), UsePathStyle: false}, "http://my-bucket.my-endpoint.com"},
-		{EndpointParameters{Bucket: ToPointer("my-bucket"), Region: ToPointer("fr-me"), Endpoint: ToPointer("http://my-endpoint.com"), UsePathStyle: true}, "http://my-endpoint.com/my-bucket"},
+		{EndpointParameters{Bucket: nil, Region: nil, Endpoint: nil, UsePathStyle: false}, awsEndpoint},
+		{EndpointParameters{Bucket: nil, Region: nil, Endpoint: nil, UsePathStyle: true}, awsEndpoint},
+		{EndpointParameters{Bucket: nil, Region: nil, Endpoint: &myEndpoint, UsePathStyle: false}, myEndpoint},
+		{EndpointParameters{Bucket: nil, Region: nil, Endpoint: &myEndpoint, UsePathStyle: true}, myEndpoint},
+		{EndpointParameters{Bucket: nil, Region: &region, Endpoint: nil, UsePathStyle: false}, "https://s3.fr-me.amazonaws.com"},
+		{EndpointParameters{Bucket: nil, Region: &region, Endpoint: nil, UsePathStyle: true}, "https://s3.fr-me.amazonaws.com"},
+		{EndpointParameters{Bucket: nil, Region: &region, Endpoint: &myEndpoint, UsePathStyle: false}, myEndpoint},
+		{EndpointParameters{Bucket: nil, Region: &region, Endpoint: &myEndpoint, UsePathStyle: true}, myEndpoint},
+		{EndpointParameters{Bucket: &bucket, Region: nil, Endpoint: nil, UsePathStyle: false}, "https://my-bucket.s3.amazonaws.com"},
+		{EndpointParameters{Bucket: &bucket, Region: nil, Endpoint: nil, UsePathStyle: true}, "https://s3.amazonaws.com/my-bucket"},
+		{EndpointParameters{Bucket: &bucket, Region: nil, Endpoint: &myEndpoint, UsePathStyle: false}, "http://my-bucket.my-endpoint.com"},
+		{EndpointParameters{Bucket: &bucket, Region: nil, Endpoint: &myEndpoint, UsePathStyle: true}, "http://my-endpoint.com/my-bucket"},
+		{EndpointParameters{Bucket: &bucket, Region: &region, Endpoint: nil, UsePathStyle: false}, "https://my-bucket.s3.fr-me.amazonaws.com"},
+		{EndpointParameters{Bucket: &bucket, Region: &region, Endpoint: nil, UsePathStyle: true}, "https://s3.fr-me.amazonaws.com/my-bucket"},
+		{EndpointParameters{Bucket: &bucket, Region: &region, Endpoint: &myEndpoint, UsePathStyle: false}, "http://my-bucket.my-endpoint.com"},
+		{EndpointParameters{Bucket: &bucket, Region: &region, Endpoint: &myEndpoint, UsePathStyle: true}, "http://my-endpoint.com/my-bucket"},
 	}
 
 	var resolver DefaultEndpointResolver

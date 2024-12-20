@@ -13,14 +13,15 @@ func TestClient_CreateBucket(t *testing.T) {
 			return &CreateBucketInput{}
 		},
 		Normal: func() (*CreateBucketInput, *CreateBucketOutput, http.HandlerFunc) {
+			location := "TheLocation"
 			return &CreateBucketInput{
 					Bucket: "TheBucket",
 				},
 				&CreateBucketOutput{
-					Location: ToPointer("TheLocation"),
+					Location: &location,
 				},
 				func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Location", "TheLocation")
+					w.Header().Set("Location", location)
 				}
 		},
 		Executor: func(c *Client) func(context.Context, *CreateBucketInput) (*CreateBucketOutput, error) {
