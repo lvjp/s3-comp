@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"net/http"
+
+	"github.com/lvjp/s3-comp/client/internal/pipeline"
 )
 
 type DeleteBucketInput struct {
@@ -10,10 +12,6 @@ type DeleteBucketInput struct {
 	Bucket string
 
 	ExpectedBucketOwner *string
-}
-
-func (input *DeleteBucketInput) GetBucket() string {
-	return input.Bucket
 }
 
 func (input *DeleteBucketInput) MarshalHTTP(ctx context.Context, req *http.Request) error {
@@ -38,35 +36,30 @@ func (*DeleteBucketOutput) UnmarshalHTTP(ctx context.Context, resp *http.Respons
 	return nil
 }
 
-const operationDeleteBucket = "DeleteBucket"
-
 func (c *Client) DeleteBucket(ctx context.Context, input *DeleteBucketInput) (*DeleteBucketOutput, error) {
-	ctx = withOperationName(ctx, operationDeleteBucket)
-
-	if input.Bucket == "" {
-		return nil, NewSDKErrorBucketIsMandatory(ctx)
-	}
-
-	req := newRequest()
-
-	if err := input.MarshalHTTP(ctx, req); err != nil {
-		return nil, NewSDKError(ctx, err.Error())
-	}
-
-	if err := c.resolve(ctx, req, input); err != nil {
-		return nil, NewSDKError(ctx, err.Error())
-	}
-
-	resp, err := c.config.HTTPClient.Do(req)
-	if err != nil {
-		return nil, NewAPITransportError(ctx, err)
-	}
-	defer resp.Body.Close()
+	const operationDeleteBucket = "DeleteBucket"
 
 	output := new(DeleteBucketOutput)
-	if err := output.UnmarshalHTTP(ctx, resp); err != nil {
+
+	handler := pipeline.NewPipeline(
+		pipeline.HandlerFunc(c.doRequest),
+		mandatoryBucketMiddleware,
+		initHTTPRequestMiddleware,
+		httpMarshalerMiddleware,
+		c.resolveMiddleware,
+		httpUnmarshalerMiddleware,
+	)
+
+	mwCtx := &pipeline.MiddlewareContext{
+		Context:  withOperationName(ctx, operationDeleteBucket),
+		Bucket:   &input.Bucket,
+		S3Input:  input,
+		S3Output: output,
+	}
+
+	if err := handler.Handle(mwCtx); err != nil {
 		return nil, err
 	}
 
-	return &DeleteBucketOutput{}, nil
+	return output, nil
 }

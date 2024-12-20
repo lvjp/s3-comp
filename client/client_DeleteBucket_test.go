@@ -8,7 +8,7 @@ import (
 
 func TestClient_DeleteBucket(t *testing.T) {
 	tc := ActionTestRunner[DeleteBucketInput, DeleteBucketOutput]{
-		OperationName: operationDeleteBucket,
+		OperationName: "DeleteBucket",
 		MissingBucket: func() *DeleteBucketInput {
 			return &DeleteBucketInput{}
 		},

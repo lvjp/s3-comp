@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"net/http"
+
+	"github.com/lvjp/s3-comp/client/internal/pipeline"
 )
 
 type HeadBucketInput struct {
@@ -10,10 +12,6 @@ type HeadBucketInput struct {
 	Bucket string
 
 	ExpectedBucketOwner *string
-}
-
-func (input *HeadBucketInput) GetBucket() string {
-	return input.Bucket
 }
 
 func (input *HeadBucketInput) MarshalHTTP(ctx context.Context, req *http.Request) error {
@@ -51,33 +49,28 @@ func (output *HeadBucketOutput) UnmarshalHTTP(ctx context.Context, resp *http.Re
 	return nil
 }
 
-const operationHeadBucket = "HeadBucket"
-
 func (c *Client) HeadBucket(ctx context.Context, input *HeadBucketInput) (*HeadBucketOutput, error) {
-	ctx = withOperationName(ctx, operationHeadBucket)
-
-	if input.Bucket == "" {
-		return nil, NewSDKErrorBucketIsMandatory(ctx)
-	}
-
-	req := newRequest()
-
-	if err := input.MarshalHTTP(ctx, req); err != nil {
-		return nil, NewSDKError(ctx, err.Error())
-	}
-
-	if err := c.resolve(ctx, req, input); err != nil {
-		return nil, NewSDKError(ctx, err.Error())
-	}
-
-	resp, err := c.config.HTTPClient.Do(req)
-	if err != nil {
-		return nil, NewAPITransportError(ctx, err)
-	}
-	defer resp.Body.Close()
+	const operationHeadBucket = "HeadBucket"
 
 	output := new(HeadBucketOutput)
-	if err := output.UnmarshalHTTP(ctx, resp); err != nil {
+
+	handler := pipeline.NewPipeline(
+		pipeline.HandlerFunc(c.doRequest),
+		mandatoryBucketMiddleware,
+		initHTTPRequestMiddleware,
+		httpMarshalerMiddleware,
+		c.resolveMiddleware,
+		httpUnmarshalerMiddleware,
+	)
+
+	mwCtx := &pipeline.MiddlewareContext{
+		Context:  withOperationName(ctx, operationHeadBucket),
+		Bucket:   &input.Bucket,
+		S3Input:  input,
+		S3Output: output,
+	}
+
+	if err := handler.Handle(mwCtx); err != nil {
 		return nil, err
 	}
 
