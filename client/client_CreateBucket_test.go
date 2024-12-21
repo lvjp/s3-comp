@@ -12,7 +12,7 @@ func TestClient_CreateBucket(t *testing.T) {
 		MissingBucket: func() *CreateBucketInput {
 			return &CreateBucketInput{}
 		},
-		Normal: func() (*CreateBucketInput, *CreateBucketOutput, http.HandlerFunc) {
+		Normal: func() (*CreateBucketInput, *CreateBucketOutput, func(t *testing.T) http.HandlerFunc) {
 			location := "TheLocation"
 			return &CreateBucketInput{
 					Bucket: "TheBucket",
@@ -20,8 +20,10 @@ func TestClient_CreateBucket(t *testing.T) {
 				&CreateBucketOutput{
 					Location: &location,
 				},
-				func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Location", location)
+				func(t *testing.T) http.HandlerFunc {
+					return func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Location", location)
+					}
 				}
 		},
 		Executor: func(c *Client) func(context.Context, *CreateBucketInput) (*CreateBucketOutput, error) {

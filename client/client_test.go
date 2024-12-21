@@ -27,7 +27,7 @@ type ActionTestRunner[Input, Output any] struct {
 	OperationName string
 	MissingBucket func() *Input
 	MissingKey    func() *Input
-	Normal        func() (*Input, *Output, http.HandlerFunc)
+	Normal        func() (*Input, *Output, func(*testing.T) http.HandlerFunc)
 	Executor      func(*Client) func(context.Context, *Input) (*Output, error)
 }
 
@@ -45,7 +45,7 @@ func (atr *ActionTestRunner[Input, Output]) runNormal(t *testing.T) {
 	t.Run("normal", func(t *testing.T) {
 		input, expected, handler := atr.Normal()
 
-		ts := httptest.NewServer(handler)
+		ts := httptest.NewServer(handler(t))
 		defer ts.Close()
 
 		config := Config{

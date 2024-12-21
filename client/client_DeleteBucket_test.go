@@ -12,13 +12,15 @@ func TestClient_DeleteBucket(t *testing.T) {
 		MissingBucket: func() *DeleteBucketInput {
 			return &DeleteBucketInput{}
 		},
-		Normal: func() (*DeleteBucketInput, *DeleteBucketOutput, http.HandlerFunc) {
+		Normal: func() (*DeleteBucketInput, *DeleteBucketOutput, func(t *testing.T) http.HandlerFunc) {
 			return &DeleteBucketInput{
 					Bucket: "TheBucket",
 				},
 				&DeleteBucketOutput{},
-				func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(http.StatusNoContent)
+				func(t *testing.T) http.HandlerFunc {
+					return func(w http.ResponseWriter, r *http.Request) {
+						w.WriteHeader(http.StatusNoContent)
+					}
 				}
 		},
 		Executor: func(c *Client) func(context.Context, *DeleteBucketInput) (*DeleteBucketOutput, error) {
