@@ -1,14 +1,18 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,29 +27,47 @@ type TestRunner interface {
 	Run(t *testing.T)
 }
 
-type ActionTestRunner[Input, Output any] struct {
+type ActionTestRunner[Input, Output, S3Input any] struct {
 	OperationName string
 	MissingBucket func() *Input
 	MissingKey    func() *Input
-	Normal        func() (*Input, *Output, func(*testing.T) http.HandlerFunc)
+	Normal        func() (*Input, *Output, *S3Input, func(*testing.T) http.HandlerFunc)
 	Executor      func(*Client) func(context.Context, *Input) (*Output, error)
+	AWSExecute    func(*s3.Client, context.Context, *S3Input) error
 }
 
-func (atr *ActionTestRunner[Input, Output]) Name() string {
+func (atr *ActionTestRunner[Input, Output, S3Input]) Name() string {
 	return atr.OperationName
 }
 
-func (atr *ActionTestRunner[Input, Output]) Run(t *testing.T) {
+func (atr *ActionTestRunner[Input, Output, S3Input]) Run(t *testing.T) {
 	atr.runValidation(t)
 	atr.runNormal(t)
 	atr.runErrors(t)
 }
 
-func (atr *ActionTestRunner[Input, Output]) runNormal(t *testing.T) {
+func (atr *ActionTestRunner[Input, Output, S3Input]) runNormal(t *testing.T) {
 	t.Run("normal", func(t *testing.T) {
-		input, expected, handler := atr.Normal()
+		input, expected, s3Input, handler := atr.Normal()
 
-		ts := httptest.NewServer(handler(t))
+		var lastRequest *http.Request
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			lastRequest = r.Clone(context.Background())
+			lastRequest.Header.Del("Amz-Sdk-Request")
+			lastRequest.Header.Del("Amz-Sdk-Invocation-Id")
+			lastRequest.Header.Del("User-Agent")
+
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				t.Log(err)
+				return
+			}
+			lastRequest.Body = io.NopCloser(bytes.NewReader(body))
+			r.Body = io.NopCloser(bytes.NewReader(body))
+
+			handler(t)(w, r)
+		}))
 		defer ts.Close()
 
 		config := Config{
@@ -53,6 +75,7 @@ func (atr *ActionTestRunner[Input, Output]) runNormal(t *testing.T) {
 			Region:           "fr-dev",
 			Endpoint:         ts.URL,
 			EndpointResolver: &hostHeaderResolver{},
+			UsePathStyle:     true,
 		}
 
 		c, err := New(config)
@@ -61,17 +84,39 @@ func (atr *ActionTestRunner[Input, Output]) runNormal(t *testing.T) {
 		actual, err := atr.Executor(c)(context.Background(), input)
 		require.NoError(t, err)
 		require.Equal(t, expected, actual)
+		ourReq := lastRequest
+
+		s3c := s3.New(s3.Options{
+			HTTPClient:   ts.Client(),
+			Region:       config.Region,
+			BaseEndpoint: &ts.URL,
+			Retryer:      aws.NopRetryer{},
+			UsePathStyle: config.UsePathStyle,
+			// Credentials:  aws.AnonymousCredentials{},
+			Credentials: aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+				return aws.Credentials{
+					AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+					SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+				}, nil
+			}),
+		})
+
+		err = atr.AWSExecute(s3c, context.Background(), s3Input)
+		require.NoError(t, err)
+		awsReq := lastRequest
+
+		require.Equal(t, awsReq, ourReq)
 	})
 }
 
-func (atr *ActionTestRunner[Input, Output]) runErrors(t *testing.T) {
+func (atr *ActionTestRunner[Input, Output, S3Input]) runErrors(t *testing.T) {
 	t.Run("errors", func(t *testing.T) {
 		t.Run("server", func(t *testing.T) {
 			httpClient := &error500HTTPClient{}
 			httpResponse := httpClient.NewResponse()
 			defer httpResponse.Body.Close()
 
-			input, _, _ := atr.Normal()
+			input, _, _, _ := atr.Normal()
 			expectedErr := NewAPIResponseError(
 				withOperationName(context.Background(), atr.OperationName),
 				httpResponse,
@@ -88,7 +133,7 @@ func (atr *ActionTestRunner[Input, Output]) runErrors(t *testing.T) {
 		t.Run("transport", func(t *testing.T) {
 			httpClient := &transportErrorHTTPClient{}
 
-			input, _, _ := atr.Normal()
+			input, _, _, _ := atr.Normal()
 			expectedErr := NewAPITransportError(
 				withOperationName(context.Background(), atr.OperationName),
 				httpClient.NewError(),
@@ -106,7 +151,7 @@ func (atr *ActionTestRunner[Input, Output]) runErrors(t *testing.T) {
 	})
 }
 
-func (atr *ActionTestRunner[Input, Output]) runValidation(t *testing.T) {
+func (atr *ActionTestRunner[Input, Output, S3Input]) runValidation(t *testing.T) {
 	t.Run("validation", func(t *testing.T) {
 		testCases := []struct {
 			name     string

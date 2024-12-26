@@ -76,7 +76,7 @@ func disableDefaultTransportGzipCompression(next pipeline.Handler) pipeline.Hand
 	return pipeline.HandlerFunc(func(ctx *pipeline.MiddlewareContext) error {
 		current := ctx.HTTPRequest.Header.Get("Accept-Encoding")
 		if current == "" {
-			ctx.HTTPRequest.Header.Set("Accept-Encoding", "")
+			ctx.HTTPRequest.Header.Set("Accept-Encoding", "identity")
 		}
 
 		return next.Handle(ctx)

@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 
 	"github.com/lvjp/s3-comp/client/internal/pipeline"
@@ -20,6 +22,9 @@ func (input *HeadBucketInput) MarshalHTTP(ctx context.Context, req *http.Request
 	if input.ExpectedBucketOwner != nil {
 		req.Header.Set("X-Amz-Expected-Bucket-Owner", *input.ExpectedBucketOwner)
 	}
+
+	hash := sha256.Sum256(nil)
+	req.Header.Set("X-Amz-Content-Sha256", hex.EncodeToString(hash[:]))
 
 	return nil
 }

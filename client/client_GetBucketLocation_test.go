@@ -7,21 +7,23 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestClient_GetBucketLocation(t *testing.T) {
-	tc := ActionTestRunner[GetBucketLocationInput, GetBucketLocationOutput]{
+	tc := ActionTestRunner[GetBucketLocationInput, GetBucketLocationOutput, s3.GetBucketLocationInput]{
 		OperationName: "GetBucketLocation",
 		MissingBucket: func() *GetBucketLocationInput {
 			return &GetBucketLocationInput{}
 		},
-		Normal: func() (*GetBucketLocationInput, *GetBucketLocationOutput, func(*testing.T) http.HandlerFunc) {
+		Normal: func() (*GetBucketLocationInput, *GetBucketLocationOutput, *s3.GetBucketLocationInput, func(*testing.T) http.HandlerFunc) {
+			bucket := "the-bucket"
 			expectedOwner := "expected-owner"
 			bucketLocation := LocationConstraint("bucket-location")
 
 			return &GetBucketLocationInput{
-					Bucket:         "the-bucket",
+					Bucket:         bucket,
 					ExpectedBucket: &expectedOwner,
 				},
 				&GetBucketLocationOutput{
@@ -30,6 +32,10 @@ func TestClient_GetBucketLocation(t *testing.T) {
 						Local: "LocationConstraint",
 					},
 					LocationConstraint: &bucketLocation,
+				},
+				&s3.GetBucketLocationInput{
+					ExpectedBucketOwner: &expectedOwner,
+					Bucket:              &bucket,
 				},
 				func(t *testing.T) http.HandlerFunc {
 					return func(w http.ResponseWriter, r *http.Request) {
@@ -46,6 +52,10 @@ func TestClient_GetBucketLocation(t *testing.T) {
 		},
 		Executor: func(c *Client) func(context.Context, *GetBucketLocationInput) (*GetBucketLocationOutput, error) {
 			return c.GetBucketLocation
+		},
+		AWSExecute: func(c *s3.Client, ctx context.Context, input *s3.GetBucketLocationInput) error {
+			_, err := c.GetBucketLocation(ctx, input)
+			return err
 		},
 	}
 
