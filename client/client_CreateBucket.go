@@ -3,6 +3,8 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/xml"
 	"io"
 	"net/http"
@@ -27,6 +29,7 @@ type CreateBucketInput struct {
 
 func (input *CreateBucketInput) MarshalHTTP(ctx context.Context, req *http.Request) error {
 	req.Method = http.MethodPut
+	req.Header.Set("Accept-Encoding", "identity") // Like aws-sdk-go-v2
 
 	for key, val := range map[string]*string{
 		"X-Amz-Acl":                        input.ACL,
@@ -43,6 +46,7 @@ func (input *CreateBucketInput) MarshalHTTP(ctx context.Context, req *http.Reque
 		}
 	}
 
+	var hash [sha256.Size]byte
 	if input.CreateBucketConfiguration != nil {
 		inputBody, err := xml.Marshal(input.CreateBucketConfiguration)
 		if err != nil {
@@ -51,7 +55,12 @@ func (input *CreateBucketInput) MarshalHTTP(ctx context.Context, req *http.Reque
 
 		req.ContentLength = int64(len(inputBody))
 		req.Body = io.NopCloser(bytes.NewReader(inputBody))
+
+		hash = sha256.Sum256(inputBody)
+	} else {
+		hash = sha256.Sum256(nil)
 	}
+	req.Header.Set("X-Amz-Content-Sha256", hex.EncodeToString(hash[:]))
 
 	return nil
 }
