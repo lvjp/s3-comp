@@ -28,7 +28,8 @@ func (input *GetBucketLocationInput) MarshalHTTP(_ context.Context, req *http.Re
 }
 
 type GetBucketLocationOutput struct {
-	LocationConstraint *LocationConstraint
+	XMLName            xml.Name            `xml:"http://s3.amazonaws.com/doc/2006-03-01/ LocationConstraint"`
+	LocationConstraint *LocationConstraint `xml:",chardata"`
 }
 
 func (output *GetBucketLocationOutput) UnmarshalHTTP(ctx context.Context, resp *http.Response) error {

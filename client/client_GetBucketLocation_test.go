@@ -25,11 +25,15 @@ func TestClient_GetBucketLocation(t *testing.T) {
 					ExpectedBucket: &expectedOwner,
 				},
 				&GetBucketLocationOutput{
+					XMLName: xml.Name{
+						Space: "http://s3.amazonaws.com/doc/2006-03-01/",
+						Local: "LocationConstraint",
+					},
 					LocationConstraint: &bucketLocation,
 				},
 				func(t *testing.T) http.HandlerFunc {
 					return func(w http.ResponseWriter, r *http.Request) {
-						body := []byte(xml.Header + "<LocationConstraint><LocationConstraint>" + bucketLocation + "</LocationConstraint></LocationConstraint>")
+						body := []byte(xml.Header + `<LocationConstraint xmlns="http://s3.amazonaws.com/doc/2006-03-01/">` + bucketLocation + "</LocationConstraint>")
 						w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 						w.Header().Set("Content-Type", "text/xml")
 						w.WriteHeader(http.StatusOK)
