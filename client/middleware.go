@@ -56,3 +56,18 @@ func httpUnmarshalerMiddleware(next pipeline.Handler) pipeline.Handler {
 		return nil
 	})
 }
+
+func userAgentMiddleware(userAgent *string) pipeline.MiddlewareFunc {
+	return func(next pipeline.Handler) pipeline.Handler {
+		return pipeline.HandlerFunc(func(ctx *pipeline.MiddlewareContext) error {
+			var value string
+			if userAgent != nil {
+				value = *userAgent
+			}
+
+			ctx.HTTPRequest.Header.Set("User-Agent", value)
+
+			return next.Handle(ctx)
+		})
+	}
+}

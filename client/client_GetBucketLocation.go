@@ -50,6 +50,7 @@ func (c *Client) GetBucketLocation(ctx context.Context, input *GetBucketLocation
 		mandatoryBucketMiddleware,
 		initHTTPRequestMiddleware,
 		httpMarshalerMiddleware,
+		userAgentMiddleware(c.config.UserAgent),
 		c.resolveMiddleware,
 		httpUnmarshalerMiddleware,
 	)

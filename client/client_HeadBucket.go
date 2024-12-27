@@ -59,6 +59,7 @@ func (c *Client) HeadBucket(ctx context.Context, input *HeadBucketInput) (*HeadB
 		mandatoryBucketMiddleware,
 		initHTTPRequestMiddleware,
 		httpMarshalerMiddleware,
+		userAgentMiddleware(c.config.UserAgent),
 		c.resolveMiddleware,
 		httpUnmarshalerMiddleware,
 	)
