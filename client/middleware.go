@@ -71,3 +71,14 @@ func userAgentMiddleware(userAgent *string) pipeline.MiddlewareFunc {
 		})
 	}
 }
+
+func disableDefaultTransportGzipCompression(next pipeline.Handler) pipeline.Handler {
+	return pipeline.HandlerFunc(func(ctx *pipeline.MiddlewareContext) error {
+		current := ctx.HTTPRequest.Header.Get("Accept-Encoding")
+		if current == "" {
+			ctx.HTTPRequest.Header.Set("Accept-Encoding", "")
+		}
+
+		return next.Handle(ctx)
+	})
+}

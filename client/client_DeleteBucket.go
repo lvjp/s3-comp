@@ -47,6 +47,7 @@ func (c *Client) DeleteBucket(ctx context.Context, input *DeleteBucketInput) (*D
 		initHTTPRequestMiddleware,
 		httpMarshalerMiddleware,
 		userAgentMiddleware(c.config.UserAgent),
+		disableDefaultTransportGzipCompression,
 		c.resolveMiddleware,
 		httpUnmarshalerMiddleware,
 	)

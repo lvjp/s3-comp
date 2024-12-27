@@ -60,6 +60,7 @@ func (c *Client) HeadBucket(ctx context.Context, input *HeadBucketInput) (*HeadB
 		initHTTPRequestMiddleware,
 		httpMarshalerMiddleware,
 		userAgentMiddleware(c.config.UserAgent),
+		disableDefaultTransportGzipCompression,
 		c.resolveMiddleware,
 		httpUnmarshalerMiddleware,
 	)
