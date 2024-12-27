@@ -84,6 +84,7 @@ func (c *Client) CreateBucket(ctx context.Context, input *CreateBucketInput) (*C
 		initHTTPRequestMiddleware,
 		httpMarshalerMiddleware,
 		userAgentMiddleware(c.config.UserAgent),
+		disableDefaultTransportGzipCompression,
 		c.resolveMiddleware,
 		httpUnmarshalerMiddleware,
 	)

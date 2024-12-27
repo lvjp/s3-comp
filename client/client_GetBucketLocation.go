@@ -51,6 +51,7 @@ func (c *Client) GetBucketLocation(ctx context.Context, input *GetBucketLocation
 		initHTTPRequestMiddleware,
 		httpMarshalerMiddleware,
 		userAgentMiddleware(c.config.UserAgent),
+		disableDefaultTransportGzipCompression,
 		c.resolveMiddleware,
 		httpUnmarshalerMiddleware,
 	)
