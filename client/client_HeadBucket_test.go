@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 func TestClient_HeadBucket(t *testing.T) {
@@ -39,6 +41,12 @@ func TestClient_HeadBucket(t *testing.T) {
 			return c.HeadBucket
 		},
 		AWSExecute: func(c *s3.Client, ctx context.Context, input *s3.HeadBucketInput) error {
+			c.CreateBucket(ctx, &s3.CreateBucketInput{
+				Bucket: aws.String("my-bucket"),
+				CreateBucketConfiguration: &types.CreateBucketConfiguration{
+					LocationConstraint: types.BucketLocationConstraintEuWest1,
+				},
+			})
 			_, err := c.HeadBucket(ctx, input)
 			return err
 		},
