@@ -1,18 +1,18 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"encoding/xml"
-	"io"
-	"net/http"
 
-	"github.com/lvjp/s3-comp/client/internal/pipeline"
+	"github.com/lvjp/s3-comp/client/types"
+
+	"github.com/valyala/fasthttp"
 )
 
 type CreateBucketInput struct {
 	// Bucket is required
-	Bucket                     string
+	Bucket string
+
 	ACL                        *string
 	GrantFullControl           *string
 	GrantRead                  *string
@@ -22,26 +22,24 @@ type CreateBucketInput struct {
 	ObjectLockEnabledForBucket *string
 	ObjectOwnership            *string
 
-	CreateBucketConfiguration *CreateBucketConfiguration
+	CreateBucketConfiguration *types.CreateBucketConfiguration
 }
 
-func (input *CreateBucketInput) MarshalHTTP(ctx context.Context, req *http.Request) error {
-	req.Method = http.MethodPut
+func (input *CreateBucketInput) GetBucket() string {
+	return input.Bucket
+}
 
-	for key, val := range map[string]*string{
-		"X-Amz-Acl":                        input.ACL,
-		"X-Amz-Grant-Full-Control":         input.GrantFullControl,
-		"X-Amz-Grant-Read":                 input.GrantRead,
-		"X-Amz-Grant-Read-Acp":             input.GrantReadACP,
-		"X-Amz-Grant-Write":                input.GrantWrite,
-		"X-Amz-Grant-Write-Acp":            input.GrantWriteACP,
-		"X-Amz-Bucket-Object-Lock-Enabled": input.ObjectLockEnabledForBucket,
-		"X-Amz-Object-Ownership":           input.ObjectOwnership,
-	} {
-		if val != nil {
-			req.Header.Set(key, *val)
-		}
-	}
+func (input *CreateBucketInput) MarshalHTTP(req *fasthttp.Request) error {
+	req.Header.SetMethod(fasthttp.MethodPut)
+
+	setHeader(&req.Header, HeaderXAmzACL, input.ACL)
+	setHeader(&req.Header, HeaderXAmzGrantFullControl, input.GrantFullControl)
+	setHeader(&req.Header, HeaderXAmzGrantRead, input.GrantRead)
+	setHeader(&req.Header, HeaderXAmzGrantReadACP, input.GrantReadACP)
+	setHeader(&req.Header, HeaderXAmzGrantWrite, input.GrantWrite)
+	setHeader(&req.Header, HeaderXAmzGrantWriteACP, input.GrantWriteACP)
+	setHeader(&req.Header, HeaderXAmzBucketObjectLockEnabled, input.ObjectLockEnabledForBucket)
+	setHeader(&req.Header, HeaderXAmzObjectOwnership, input.ObjectOwnership)
 
 	if input.CreateBucketConfiguration != nil {
 		inputBody, err := xml.Marshal(input.CreateBucketConfiguration)
@@ -49,8 +47,7 @@ func (input *CreateBucketInput) MarshalHTTP(ctx context.Context, req *http.Reque
 			return err
 		}
 
-		req.ContentLength = int64(len(inputBody))
-		req.Body = io.NopCloser(bytes.NewReader(inputBody))
+		req.SetBody(inputBody)
 	}
 
 	return nil
@@ -60,44 +57,16 @@ type CreateBucketOutput struct {
 	Location *string
 }
 
-func (output *CreateBucketOutput) UnmarshalHTTP(ctx context.Context, resp *http.Response) error {
-	if resp.StatusCode != http.StatusOK {
-		return NewAPIResponseError(ctx, resp)
+func (output *CreateBucketOutput) UnmarshalHTTP(resp *fasthttp.Response) error {
+	if resp.StatusCode() != fasthttp.StatusOK {
+		return NewServerSideError(resp)
 	}
 
-	location := resp.Header.Values("Location")
-	if location != nil {
-		output.Location = &location[0]
-	}
+	output.Location = extractHeader(&resp.Header, HeaderLocation)
 
 	return nil
 }
 
-func (c *Client) CreateBucket(ctx context.Context, input *CreateBucketInput) (*CreateBucketOutput, error) {
-	const operationCreateBucket = "CreateBucket"
-
-	output := new(CreateBucketOutput)
-
-	handler := pipeline.NewPipeline(
-		pipeline.HandlerFunc(c.doRequest),
-		mandatoryBucketMiddleware,
-		initHTTPRequestMiddleware,
-		httpMarshalerMiddleware,
-		userAgentMiddleware(c.config.UserAgent),
-		c.resolveMiddleware,
-		httpUnmarshalerMiddleware,
-	)
-
-	mwCtx := &pipeline.MiddlewareContext{
-		Context:  withOperationName(ctx, operationCreateBucket),
-		Bucket:   &input.Bucket,
-		S3Input:  input,
-		S3Output: output,
-	}
-
-	if err := handler.Handle(mwCtx); err != nil {
-		return nil, err
-	}
-
-	return output, nil
+func (c *Client) CreateBucket(ctx context.Context, input *CreateBucketInput, optFns ...func(*Options)) (*CreateBucketOutput, *Metadata, error) {
+	return PerformCall[*CreateBucketInput, *CreateBucketOutput](ctx, c, input, optFns...)
 }

@@ -54,7 +54,7 @@ linters:
         path: _test\.go
       - linters:
           - dupl
-        path: ^client_.*\.go
+        path: ^client/client_.*\.go
 formatters:
   enable:
     - gci

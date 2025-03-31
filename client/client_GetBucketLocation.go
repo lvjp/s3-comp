@@ -3,68 +3,46 @@ package client
 import (
 	"context"
 	"encoding/xml"
-	"net/http"
 
-	"github.com/lvjp/s3-comp/client/internal/pipeline"
+	"github.com/lvjp/s3-comp/client/types"
+
+	"github.com/valyala/fasthttp"
 )
 
 type GetBucketLocationInput struct {
-	// bucket is required
-	Bucket         string
-	ExpectedBucket *string
+	// Bucket is mandatory
+	Bucket string
+
+	ExpectedBucketOwner *string
 }
 
-func (input *GetBucketLocationInput) MarshalHTTP(_ context.Context, req *http.Request) error {
-	req.Method = http.MethodGet
-	q := req.URL.Query()
-	q.Set("location", "")
-	req.URL.RawQuery = q.Encode()
+func (input *GetBucketLocationInput) GetBucket() string {
+	return input.Bucket
+}
 
-	if input.ExpectedBucket != nil {
-		req.Header.Set("X-Amz-Expected-Bucket-Owner", *input.ExpectedBucket)
-	}
+func (input *GetBucketLocationInput) MarshalHTTP(req *fasthttp.Request) error {
+	req.Header.SetMethod(fasthttp.MethodGet)
+
+	req.URI().QueryArgs().SetNoValue(QueryLocation)
+
+	setHeader(&req.Header, HeaderXAmzExpectedBucketOwner, input.ExpectedBucketOwner)
 
 	return nil
 }
 
 type GetBucketLocationOutput struct {
-	XMLName            xml.Name            `xml:"http://s3.amazonaws.com/doc/2006-03-01/ LocationConstraint"`
-	LocationConstraint *LocationConstraint `xml:",chardata"`
+	XMLName            xml.Name                  `xml:"LocationConstraint"`
+	LocationConstraint *types.LocationConstraint `xml:",chardata"`
 }
 
-func (output *GetBucketLocationOutput) UnmarshalHTTP(ctx context.Context, resp *http.Response) error {
-	if resp.StatusCode != http.StatusOK {
-		return NewAPIResponseError(ctx, resp)
+func (output *GetBucketLocationOutput) UnmarshalHTTP(resp *fasthttp.Response) error {
+	if resp.StatusCode() != fasthttp.StatusOK {
+		return NewServerSideError(resp)
 	}
 
-	return xml.NewDecoder(resp.Body).Decode(output)
+	return xml.Unmarshal(resp.Body(), output)
 }
 
-func (c *Client) GetBucketLocation(ctx context.Context, input *GetBucketLocationInput) (*GetBucketLocationOutput, error) {
-	const operationName = "GetBucketLocation"
-
-	output := new(GetBucketLocationOutput)
-
-	handler := pipeline.NewPipeline(
-		pipeline.HandlerFunc(c.doRequest),
-		mandatoryBucketMiddleware,
-		initHTTPRequestMiddleware,
-		httpMarshalerMiddleware,
-		userAgentMiddleware(c.config.UserAgent),
-		c.resolveMiddleware,
-		httpUnmarshalerMiddleware,
-	)
-
-	mwCtx := &pipeline.MiddlewareContext{
-		Context:  withOperationName(ctx, operationName),
-		Bucket:   &input.Bucket,
-		S3Input:  input,
-		S3Output: output,
-	}
-
-	if err := handler.Handle(mwCtx); err != nil {
-		return nil, err
-	}
-
-	return output, nil
+func (c *Client) GetBucketLocation(ctx context.Context, input *GetBucketLocationInput, optFns ...func(*Options)) (*GetBucketLocationOutput, *Metadata, error) {
+	return PerformCall[*GetBucketLocationInput, *GetBucketLocationOutput](ctx, c, input, optFns...)
 }

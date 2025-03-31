@@ -1,73 +1,78 @@
 package client
 
 import (
-	"bytes"
-	"io"
+	"context"
 
-	"github.com/lvjp/s3-comp/client/internal/pipeline"
+	chain_of_responsibility "github.com/lvjp/s3-comp/client/pkg/design-patterns/chain-of-responsibility"
+
+	"github.com/valyala/fasthttp"
 )
 
 type Client struct {
-	config Config
+	options Options
 }
 
-func New(cfg Config) (*Client, error) {
-	c := &Client{
-		config: cfg,
+func New(options *Options, optFns ...func(*Options)) (*Client, error) {
+	c := &Client{}
+
+	if options != nil {
+		c.options = *options
 	}
 
-	if err := c.config.SetDefaults(); err != nil {
+	for _, fn := range optFns {
+		fn(&c.options)
+	}
+
+	c.options.setDefaults()
+	if err := c.options.validate(); err != nil {
 		return nil, err
 	}
 
 	return c, nil
 }
 
-func (c *Client) doRequest(ctx *pipeline.MiddlewareContext) error {
-	resp, err := c.config.HTTPClient.Do(ctx.HTTPRequest)
-	if err != nil {
-		return NewAPITransportError(ctx, err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	resp.Body = io.NopCloser(bytes.NewReader(body))
-	ctx.HTTPResponse = resp
-
-	return nil
+type Metadata struct {
+	Request  *fasthttp.Request
+	Response *fasthttp.Response
 }
 
-func (c *Client) resolveMiddleware(next pipeline.Handler) pipeline.Handler {
-	return pipeline.HandlerFunc(func(ctx *pipeline.MiddlewareContext) error {
-		params := EndpointParameters{
-			Region:       &c.config.Region,
-			Endpoint:     &c.config.Endpoint,
-			UsePathStyle: c.config.UsePathStyle,
-			Bucket:       ctx.Bucket,
-		}
+func PerformCall[
+	Input HTTPRequestMarshaler,
+	OutputPtr interface {
+		HTTPResponseUnmarshaler
+		*OutputBase
+	},
+	OutputBase any,
+](ctx context.Context, c *Client, input Input, optFns ...func(*Options)) (OutputPtr, *Metadata, error) {
+	in := &handlerInput[Input]{
+		Options:   c.options.With(optFns...),
+		CallInput: input,
+	}
 
-		endpoint, err := c.config.EndpointResolver.ResolveEndpoint(ctx, params)
-		if err != nil {
-			if _, ok := c.config.EndpointResolver.(*DefaultEndpointResolver); ok {
-				return err
-			}
+	chain := chain_of_responsibility.NewChain(
+		&httpRequesterHandler[Input, OutputPtr]{},
+		&errorMiddleware[Input, OutputPtr]{},
+		&configValidationMiddleware[Input, OutputPtr]{},
+		&requiredInputMiddleware[Input, OutputPtr]{},
+		&userAgentMiddleware[Input, OutputPtr]{},
+		&resolveEndpointMiddleware[Input, OutputPtr]{},
+		&transportMiddleware[Input, OutputBase, OutputPtr]{},
+		&signerMiddleware[Input, OutputPtr]{},
+	)
 
-			return NewSDKError(ctx, "cannot resolve endpoint: "+err.Error())
-		}
+	out, err := chain.Handle(ctx, in)
 
-		ctx.HTTPRequest.URL.Scheme = endpoint.URI.Scheme
-		ctx.HTTPRequest.URL.Host = endpoint.URI.Host
-		ctx.HTTPRequest.URL.Path = joinURIPath(endpoint.URI.Path, ctx.HTTPRequest.URL.Path)
-		ctx.HTTPRequest.URL.RawPath = joinURIPath(endpoint.URI.RawPath, ctx.HTTPRequest.URL.RawPath)
+	metadata := &Metadata{
+		Request: &in.ServerRequest,
+	}
 
-		for key := range endpoint.Headers {
-			ctx.HTTPRequest.Header.Set(key, endpoint.Headers.Get(key))
-		}
+	if out != nil {
+		metadata.Response = out.ServerResponse
+	}
 
-		return next.Handle(ctx)
-	})
+	if err != nil {
+		return nil, metadata, err
+	}
+
+	return out.CallOutputV3, metadata, nil
 }

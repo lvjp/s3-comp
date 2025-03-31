@@ -2,9 +2,8 @@ package client
 
 import (
 	"context"
-	"net/http"
 
-	"github.com/lvjp/s3-comp/client/internal/pipeline"
+	"github.com/valyala/fasthttp"
 )
 
 type DeleteBucketInput struct {
@@ -14,13 +13,14 @@ type DeleteBucketInput struct {
 	ExpectedBucketOwner *string
 }
 
-func (input *DeleteBucketInput) MarshalHTTP(ctx context.Context, req *http.Request) error {
-	req.Method = http.MethodDelete
-	req.Body = http.NoBody
+func (input *DeleteBucketInput) GetBucket() string {
+	return input.Bucket
+}
 
-	if input.ExpectedBucketOwner != nil {
-		req.Header.Set("X-Amz-Expected-Bucket-Owner", *input.ExpectedBucketOwner)
-	}
+func (input *DeleteBucketInput) MarshalHTTP(req *fasthttp.Request) error {
+	req.Header.SetMethod(fasthttp.MethodDelete)
+
+	setHeader(&req.Header, HeaderXAmzExpectedBucketOwner, input.ExpectedBucketOwner)
 
 	return nil
 }
@@ -28,39 +28,14 @@ func (input *DeleteBucketInput) MarshalHTTP(ctx context.Context, req *http.Reque
 type DeleteBucketOutput struct {
 }
 
-func (*DeleteBucketOutput) UnmarshalHTTP(ctx context.Context, resp *http.Response) error {
-	if resp.StatusCode != http.StatusNoContent {
-		return NewAPIResponseError(ctx, resp)
+func (*DeleteBucketOutput) UnmarshalHTTP(resp *fasthttp.Response) error {
+	if resp.StatusCode() != fasthttp.StatusNoContent {
+		return NewServerSideError(resp)
 	}
 
 	return nil
 }
 
-func (c *Client) DeleteBucket(ctx context.Context, input *DeleteBucketInput) (*DeleteBucketOutput, error) {
-	const operationDeleteBucket = "DeleteBucket"
-
-	output := new(DeleteBucketOutput)
-
-	handler := pipeline.NewPipeline(
-		pipeline.HandlerFunc(c.doRequest),
-		mandatoryBucketMiddleware,
-		initHTTPRequestMiddleware,
-		httpMarshalerMiddleware,
-		userAgentMiddleware(c.config.UserAgent),
-		c.resolveMiddleware,
-		httpUnmarshalerMiddleware,
-	)
-
-	mwCtx := &pipeline.MiddlewareContext{
-		Context:  withOperationName(ctx, operationDeleteBucket),
-		Bucket:   &input.Bucket,
-		S3Input:  input,
-		S3Output: output,
-	}
-
-	if err := handler.Handle(mwCtx); err != nil {
-		return nil, err
-	}
-
-	return output, nil
+func (c *Client) DeleteBucket(ctx context.Context, input *DeleteBucketInput, optFns ...func(*Options)) (*DeleteBucketOutput, *Metadata, error) {
+	return PerformCall[*DeleteBucketInput, *DeleteBucketOutput](ctx, c, input, optFns...)
 }

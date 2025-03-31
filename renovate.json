@@ -7,7 +7,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Update dockerfile sections in linters descriptors",
+      "description": "Update golangci-lint version",
       "fileMatch": [
         "^\\.github/workflows/linting\\.yml$"
       ],

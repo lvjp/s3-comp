@@ -1,19 +1,55 @@
 package client
 
-func joinURIPath(a, b string) string {
-	if len(a) == 0 {
-		a = "/"
-	} else if a[0] != '/' {
-		a = "/" + a
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/valyala/fasthttp"
+)
+
+func setQuery(args *fasthttp.Args, name string, value *string) {
+	if value == nil {
+		return
 	}
 
-	if len(b) != 0 && b[0] == '/' {
-		b = b[1:]
+	args.Set(name, *value)
+}
+
+func setHeader(requestHeader *fasthttp.RequestHeader, key string, value *string) {
+	if value == nil {
+		return
 	}
 
-	if len(b) != 0 && a[len(a)-1] != '/' {
-		a += "/"
+	requestHeader.Set(key, *value)
+}
+
+func setHeaderOrTrailer(requestHeader *fasthttp.RequestHeader, key string, header, trailer *string) {
+	haveValue := header != nil
+	haveTrailer := trailer != nil
+
+	switch {
+	case haveValue && haveTrailer:
+		panic("cannot set both header and trailer for " + strconv.Quote(key))
+	case haveValue && !haveTrailer:
+		requestHeader.Set(key, *header)
+	case !haveValue && haveTrailer:
+		if actual := requestHeader.Peek(HeaderXAmzTrailer); len(actual) > 0 {
+			panic(fmt.Sprintf("trailer already set: %q", actual))
+		}
+
+		requestHeader.Set(HeaderXAmzTrailer, key)
+		requestHeader.Set(key, *trailer)
+	default:
+		// !haveValue && !haveTrailer is a no-op
+	}
+}
+
+func extractHeader(responseHeader *fasthttp.ResponseHeader, key string) *string {
+	value := responseHeader.Peek(key)
+	if value == nil {
+		return nil
 	}
 
-	return a + b
+	str := string(value)
+	return &str
 }
